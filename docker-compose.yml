@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mpt-postgres
+    environment:
+      POSTGRES_USER: mptuser
+      POSTGRES_PASSWORD: mptpass123
+      POSTGRES_DB: mptsystem
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mptuser -d mptsystem"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mpt-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    environment:
+      MH_STORAGE: memory
+      MH_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MH_API_BIND_ADDR: 0.0.0.0:8025
+      MH_UI_BIND_ADDR: 0.0.0.0:8025
+
+  minio:
+    image: minio/minio:latest
+    container_name: mpt-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: mptadmin
+      MINIO_ROOT_PASSWORD: mptpass123
+      MINIO_DEFAULT_BUCKETS: mpt-uploads,mpt-documents
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  createbuckets:
+    image: minio/mc:latest
+    container_name: mpt-createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set mptminio http://minio:9000 mptadmin mptpass123;
+      /usr/bin/mc mb mptminio/mpt-uploads || true;
+      /usr/bin/mc mb mptminio/mpt-documents || true;
+      /usr/bin/mc anonymous set public mptminio/mpt-uploads;
+      exit 0;
+      "
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  default:
+    name: mpt-network

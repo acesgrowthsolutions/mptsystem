@@ -1,0 +1,580 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  admin
+  sales
+  viewer
+}
+
+enum CustomerStatus {
+  active
+  inactive
+}
+
+enum AccountType {
+  thirtyDay @map("30d")
+  fifteenDay @map("15d")
+  rc
+  cash
+}
+
+enum SupplierStatus {
+  active
+  inactive
+}
+
+enum SupplierCategory {
+  OEM
+  ALT
+  USED
+}
+
+enum JobStatus {
+  JobCreated
+  AwaitingProcess
+  AwaitingApprovals
+  SaleMade
+  NoSale
+  Completed
+  Cancelled
+}
+
+enum SendTo {
+  PanelBeater
+  RepairCentral
+}
+
+enum PartType {
+  OEM
+  ALT
+  USED
+}
+
+enum PartSource {
+  ToRequest
+  FromInventory
+  FromSupplier
+}
+
+enum SaleStatus {
+  Unknown
+  Yes
+  No
+}
+
+enum InventoryStatus {
+  available
+  reserved
+  sold
+  returned
+}
+
+enum DeliveryStatus {
+  Pending
+  Picked
+  OutForDelivery
+  Delivered
+  Returned
+}
+
+enum EmailTemplate {
+  OEM_REQUEST
+  ALTUSED_REQUEST
+  QUOTE
+  DELIVERY_NOTE
+}
+
+enum EmailStatus {
+  Queued
+  Sent
+  Failed
+}
+
+enum DocumentKind {
+  upload
+  quote_pdf
+  delivery_note
+  invoice
+  other
+}
+
+// Models
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  role         UserRole
+  passwordHash String   @map("password_hash")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdBy    String?  @map("created_by")
+  updatedBy    String?  @map("updated_by")
+
+  createdJobs      Job[]         @relation("JobCreatedBy")
+  updatedJobs      Job[]         @relation("JobUpdatedBy")
+  uploadedDocuments JobDocument[] @relation("DocumentUploader")
+  comments         JobComment[]
+  complaints       JobComplaint[]
+
+  @@map("user")
+}
+
+model MotivationalQuote {
+  id        String   @id @default(uuid())
+  text      String
+  source    String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@map("motivational_quote")
+}
+
+model Region {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  jobs      Job[]
+  customers Customer[]
+
+  @@map("region")
+}
+
+model Insurer {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  jobs Job[]
+
+  @@map("insurer")
+}
+
+model Salesperson {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  jobs Job[]
+
+  @@map("salesperson")
+}
+
+model Moderator {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  jobs Job[]
+
+  @@map("moderator")
+}
+
+model Customer {
+  id           String         @id @default(uuid())
+  code         String         @unique
+  tradingName  String         @map("trading_name")
+  status       CustomerStatus
+  accountType  AccountType    @map("account_type")
+  paymentTerms String?        @map("payment_terms")
+  primaryContact Json         @map("primary_contact")
+  contacts     Json[]
+  regionId     String         @map("region_id")
+  city         String
+  address      Json
+  banking      Json?
+  notes        String?
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  createdBy    String?        @map("created_by")
+  updatedBy    String?        @map("updated_by")
+
+  region     Region     @relation(fields: [regionId], references: [id])
+  jobs       Job[]
+  deliveries Delivery[] @relation("DeliveryDestination")
+
+  @@map("customer")
+}
+
+model Supplier {
+  id                    String           @id @default(uuid())
+  code                  String           @unique
+  companyName           String           @map("company_name")
+  status                SupplierStatus
+  regNo                 String?          @map("reg_no")
+  vatNo                 String?          @map("vat_no")
+  website               String?
+  primaryContact        Json             @map("primary_contact")
+  contacts              Json[]
+  address               Json
+  category              SupplierCategory
+  tradeDiscountPct      Decimal?         @db.Decimal(5, 2) @map("trade_discount_pct")
+  settlementDiscountPct Decimal?         @db.Decimal(5, 2) @map("settlement_discount_pct")
+  creditTerms           String?          @map("credit_terms")
+  creditLimit           Decimal?         @db.Decimal(12, 2) @map("credit_limit")
+  minOrderValue         Decimal?         @db.Decimal(12, 2) @map("min_order_value")
+  returnPolicy          String?          @map("return_policy")
+  rating                Int?
+  warrantyTerms         String?          @map("warranty_terms")
+  banking               Json?
+  notes                 String?
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  createdBy             String?          @map("created_by")
+  updatedBy             String?          @map("updated_by")
+
+  @@map("supplier")
+}
+
+model VehicleMake {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  models         VehicleModel[]
+  oemRoutes      OemSupplierRoute[]
+  jobVehicles    JobVehicle[]
+  inventoryItems Inventory[]
+
+  @@map("vehicle_make")
+}
+
+model VehicleModel {
+  id        String   @id @default(uuid())
+  makeId    String   @map("make_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  make           VehicleMake  @relation(fields: [makeId], references: [id])
+  jobVehicles    JobVehicle[]
+  inventoryItems Inventory[]
+
+  @@unique([makeId, name])
+  @@map("vehicle_model")
+}
+
+model OemSupplierRoute {
+  id        String   @id @default(uuid())
+  makeId    String   @map("make_id")
+  toEmails  String[] @map("to_emails")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  make VehicleMake @relation(fields: [makeId], references: [id])
+
+  @@unique([makeId])
+  @@map("oem_supplier_route")
+}
+
+model Job {
+  id                 String    @id @default(uuid())
+  jobNo              String    @unique @map("job_no")
+  insurerId          String    @map("insurer_id")
+  regionId           String    @map("region_id")
+  city               String
+  claimNo            String    @map("claim_no")
+  claimReceivedDate  DateTime  @map("claim_received_date")
+  moderatorId        String    @map("moderator_id")
+  salespersonId      String    @map("salesperson_id")
+  quoteDate          DateTime? @map("quote_date")
+  sendTo             SendTo    @map("send_to")
+  status             JobStatus @default(JobCreated)
+  customerId         String?   @map("customer_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdBy          String?   @map("created_by")
+  updatedBy          String?   @map("updated_by")
+
+  insurer     Insurer       @relation(fields: [insurerId], references: [id])
+  region      Region        @relation(fields: [regionId], references: [id])
+  moderator   Moderator     @relation(fields: [moderatorId], references: [id])
+  salesperson Salesperson   @relation(fields: [salespersonId], references: [id])
+  customer    Customer?     @relation(fields: [customerId], references: [id])
+  createdUser User?         @relation("JobCreatedBy", fields: [createdBy], references: [id])
+  updatedUser User?         @relation("JobUpdatedBy", fields: [updatedBy], references: [id])
+
+  vehicle    JobVehicle?
+  parts      JobPart[]
+  deliveries Delivery[]
+  returns    Return[]
+  emails     EmailLog[]
+  documents  JobDocument[]
+  comments   JobComment[]
+  complaints JobComplaint[]
+  events     JobEvent[]
+
+  @@index([jobNo])
+  @@index([claimNo])
+  @@index([city])
+  @@map("job")
+}
+
+model JobVehicle {
+  id        String   @id @default(uuid())
+  jobId     String   @unique @map("job_id")
+  makeId    String   @map("make_id")
+  modelId   String   @map("model_id")
+  year      Int
+  color     String?
+  vin       String?
+  engineNo  String?  @map("engine_no")
+  regNo     String?  @map("reg_no")
+  warranty  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  job   Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  make  VehicleMake  @relation(fields: [makeId], references: [id])
+  model VehicleModel @relation(fields: [modelId], references: [id])
+
+  @@map("job_vehicle")
+}
+
+model JobPart {
+  id               String     @id @default(uuid())
+  jobId            String     @map("job_id")
+  partType         PartType   @map("part_type")
+  description      String
+  quantity         Int
+  requestNeeded    Boolean    @default(true) @map("request_needed")
+  source           PartSource @default(ToRequest)
+  cost             Decimal?   @db.Decimal(12, 2)
+  markupPct        Decimal?   @db.Decimal(5, 2) @map("markup_pct")
+  sellTotal        Decimal?   @db.Decimal(12, 2) @map("sell_total")
+  priced           Boolean    @default(false)
+  saleStatus       SaleStatus @default(Unknown) @map("sale_status")
+  returned         Boolean    @default(false)
+  inventoryItemId  String?    @map("inventory_item_id")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  createdBy        String?    @map("created_by")
+  updatedBy        String?    @map("updated_by")
+
+  job           Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  inventoryItem Inventory? @relation(fields: [inventoryItemId], references: [id])
+  deliveries    Delivery[]
+  returns       Return[]
+
+  @@map("job_part")
+}
+
+model Inventory {
+  id               String          @id @default(uuid())
+  partType         PartType        @map("part_type")
+  makeId           String          @map("make_id")
+  modelId          String          @map("model_id")
+  year             Int
+  description      String
+  quantity         Int
+  cost             Decimal         @db.Decimal(12, 2)
+  defaultMarkupPct Decimal?        @db.Decimal(5, 2) @map("default_markup_pct")
+  sell             Decimal?        @db.Decimal(12, 2) @db.Generated("cost * (1 + COALESCE(default_markup_pct, 0) / 100)")
+  status           InventoryStatus @default(available)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  createdBy        String?         @map("created_by")
+  updatedBy        String?         @map("updated_by")
+
+  make    VehicleMake  @relation(fields: [makeId], references: [id])
+  model   VehicleModel @relation(fields: [modelId], references: [id])
+  jobParts JobPart[]
+  returns  Return[]     @relation("RestockedInventory")
+
+  @@index([partType, makeId, modelId, year, description])
+  @@map("inventory")
+}
+
+model Delivery {
+  id                    String         @id @default(uuid())
+  jobId                 String         @map("job_id")
+  jobPartId             String         @map("job_part_id")
+  destinationCustomerId String         @map("destination_customer_id")
+  destinationAddress    Json           @map("destination_address")
+  requestedAt           DateTime       @default(now()) @map("requested_at")
+  readyAt               DateTime?      @map("ready_at")
+  driverManifestId      String?        @map("driver_manifest_id")
+  status                DeliveryStatus @default(Pending)
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  createdBy             String?        @map("created_by")
+  updatedBy             String?        @map("updated_by")
+
+  job        Job             @relation(fields: [jobId], references: [id])
+  jobPart    JobPart         @relation(fields: [jobPartId], references: [id])
+  customer   Customer        @relation("DeliveryDestination", fields: [destinationCustomerId], references: [id])
+  manifest   DriverManifest? @relation(fields: [driverManifestId], references: [id])
+
+  @@map("delivery")
+}
+
+model DriverManifest {
+  id           String   @id @default(uuid())
+  manifestNo   String   @unique @map("manifest_no")
+  deliveryDate DateTime @map("delivery_date")
+  driverName   String   @map("driver_name")
+  notes        String?
+  pdfUrl       String?  @map("pdf_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdBy    String?  @map("created_by")
+  updatedBy    String?  @map("updated_by")
+
+  deliveries Delivery[]
+
+  @@map("driver_manifest")
+}
+
+model Return {
+  id                  String    @id @default(uuid())
+  jobId               String    @map("job_id")
+  jobPartId           String    @map("job_part_id")
+  reasonText          String    @map("reason_text")
+  restockedInventoryId String?  @map("restocked_inventory_id")
+  processedAt         DateTime? @map("processed_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  createdBy           String?   @map("created_by")
+  updatedBy           String?   @map("updated_by")
+
+  job               Job        @relation(fields: [jobId], references: [id])
+  jobPart           JobPart    @relation(fields: [jobPartId], references: [id])
+  restockedInventory Inventory? @relation("RestockedInventory", fields: [restockedInventoryId], references: [id])
+
+  @@map("return")
+}
+
+model EmailLog {
+  id           String        @id @default(uuid())
+  jobId        String?       @map("job_id")
+  template     EmailTemplate
+  toEmails     String[]      @map("to_emails")
+  subject      String
+  bodySnapshot String        @map("body_snapshot")
+  payload      Json
+  sentAt       DateTime?     @map("sent_at")
+  messageId    String?       @map("message_id")
+  status       EmailStatus   @default(Queued)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  createdBy    String?       @map("created_by")
+  updatedBy    String?       @map("updated_by")
+
+  job Job? @relation(fields: [jobId], references: [id])
+
+  @@map("email_log")
+}
+
+model JobDocument {
+  id           String       @id @default(uuid())
+  jobId        String       @map("job_id")
+  kind         DocumentKind
+  fileUrl      String       @map("file_url")
+  originalName String       @map("original_name")
+  uploadedBy   String       @map("uploaded_by")
+  uploadedAt   DateTime     @default(now()) @map("uploaded_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  createdBy    String?      @map("created_by")
+  updatedBy    String?      @map("updated_by")
+
+  job      Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  uploader User @relation("DocumentUploader", fields: [uploadedBy], references: [id])
+
+  @@map("job_document")
+}
+
+model JobComment {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  body      String
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  job    Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("job_comment")
+}
+
+model JobComplaint {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  body      String
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  job    Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("job_complaint")
+}
+
+model JobEvent {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  type      String
+  message   String
+  meta      Json?
+  at        DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_event")
+}
+
+model JobNumberSequence {
+  year      Int @id @db.SmallInt
+  lastSeq   Int @map("last_seq")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("job_number_sequence")
+}
