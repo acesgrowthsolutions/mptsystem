@@ -406,7 +406,7 @@ model Inventory {
   quantity         Int
   cost             Decimal         @db.Decimal(12, 2)
   defaultMarkupPct Decimal?        @db.Decimal(5, 2) @map("default_markup_pct")
-  sell             Decimal?        @db.Decimal(12, 2) @db.Generated("cost * (1 + COALESCE(default_markup_pct, 0) / 100)")
+  sell             Decimal?        @db.Decimal(12, 2)
   status           InventoryStatus @default(available)
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
